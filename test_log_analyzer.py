@@ -9,8 +9,6 @@ import filecmp
 
 class TestLogAnalyzer(unittest.TestCase):
 
-
-
     def setUp(self):
         config = {
             "REPORT_SIZE": 1000,
