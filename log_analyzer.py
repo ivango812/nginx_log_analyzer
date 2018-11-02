@@ -48,7 +48,7 @@ log_line_pattern = re.compile(LOG_LINE_REGEXP, re.IGNORECASE)
 
 MAX_ERROR_COUNT = 100
 MAX_ERROR_PERCENT = 0.1
-FLOAT_PRECITION = 3
+FLOAT_PRECISION = 3
 LogFile = namedtuple('LogFile', ['filename', 'date'])
 StatCount = namedtuple('StatCount', ['lines', 'urls', 'time', 'errors'])
 ANALYZER_LOG_FILENAME = './logfile.log'
@@ -115,7 +115,7 @@ def build_report_filepath(report_dir, dt):
 
 def get_latest_log_filename(log_dir):
     """
-    Search youngest (by date in filename) log file matches template nginx-access-ui.log-<YearMonthDay> or .gz
+    Search latest (by date in filename) log file matches template nginx-access-ui.log-<YearMonthDay> or .gz
     :param log_dir:
     :return:
     """
@@ -154,12 +154,12 @@ def read_and_parse_log(logfile):
         for line in file:
             matches = log_line_pattern.match(line)
             if matches:
-                url = matches.group("request")
-                url_time = float(matches.group("request_time"))
-                if url not in urls:
-                    urls[url] = []
-                urls[url].append(url_time)
-                time += url_time
+                request = matches.group("request")
+                request_time = float(matches.group("request_time"))
+                if request not in urls:
+                    urls[request] = []
+                urls[request].append(request_time)
+                time += request_time
                 requests += 1
             else:
                 errors += 1
@@ -177,18 +177,18 @@ def calculate_statistics(urls, total_request_count, total_request_time):
     for url, url_time in urls.items():
         url_stat = {'url': url,
                     'count': len(url_time),
-                    'time_sum': round(sum(url_time), FLOAT_PRECITION)}
+                    'time_sum': round(sum(url_time), FLOAT_PRECISION)}
 
         # count percent
-        url_stat['count_perc'] = round(100 * url_stat['count'] / total_request_count, FLOAT_PRECITION)
+        url_stat['count_perc'] = round(100 * url_stat['count'] / total_request_count, FLOAT_PRECISION)
 
         # time_sum percent
-        url_stat['time_perc'] = round(100 * url_stat['time_sum'] / total_request_time, FLOAT_PRECITION)
+        url_stat['time_perc'] = round(100 * url_stat['time_sum'] / total_request_time, FLOAT_PRECISION)
 
         # time avg, max, med
-        url_stat['time_avg'] = round(url_stat['time_sum'] / url_stat['count'], FLOAT_PRECITION)
-        url_stat['time_max'] = round(max(url_time), FLOAT_PRECITION)
-        url_stat['time_med'] = round(median(url_time), FLOAT_PRECITION)
+        url_stat['time_avg'] = round(url_stat['time_sum'] / url_stat['count'], FLOAT_PRECISION)
+        url_stat['time_max'] = round(max(url_time), FLOAT_PRECISION)
+        url_stat['time_med'] = round(median(url_time), FLOAT_PRECISION)
 
         statistic.append(url_stat)
 
@@ -208,13 +208,11 @@ def write_report(report_filename, statistic, report_html_template, report_size):
         log.write(report_string)
 
 
-def main():
+def main(config):
 
     script_args = get_script_args()
-
     if script_args.config:
         handle_config_file(config, script_args.config)
-
     configure_logging(logging, config["LOGGING_TO_FILE"], config['LOGGING_LEVEL'])
 
     logging.info('Launch NGINX Log Analyzer ======================================================')
@@ -244,16 +242,15 @@ def main():
 
     logging.info('Writing report file: %s', report_filename)
     write_report(report_filename, statistic, config['REPORT_HTML_TEMPLATE'], config['REPORT_SIZE'])
-
     logging.info('Done!')
 
 
 if __name__ == "__main__":
     try:
-        main()
+        main(config)
     except KeyboardInterrupt:  # catching Ctrl+C or other Exception
         logging.info("Interrapted by user!")
         sys.exit(2)
-    except Exception as err:
-        logging.exception(err)
+    except Exception:
+        logging.exception()
         sys.exit(1)

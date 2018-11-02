@@ -10,7 +10,7 @@ import filecmp
 class TestLogAnalyzer(unittest.TestCase):
 
     def setUp(self):
-        config = {
+        self.config = {
             "REPORT_SIZE": 1000,
             "REPORT_DIR": "./reports_test",
             "REPORT_HTML_TEMPLATE": "./report.html",
@@ -19,12 +19,10 @@ class TestLogAnalyzer(unittest.TestCase):
             "LOGGING_LEVEL": log_analyzer.logging.DEBUG
         }
 
-        log_analyzer.config = config
-
-        log_file = 'nginx-access-ui.log-20180101'
+        # log_file = 'nginx-access-ui.log-20180101'
         report_file = 'report-2018.01.01.html'
-        self.source_path = os.path.join(config['LOG_DIR'], report_file)
-        self.report_path = os.path.join(config['REPORT_DIR'], report_file)
+        self.source_path = os.path.join(self.config['LOG_DIR'], report_file)
+        self.report_path = os.path.join(self.config['REPORT_DIR'], report_file)
 
         if os.path.exists(self.report_path):
             os.remove(self.report_path)
@@ -32,7 +30,7 @@ class TestLogAnalyzer(unittest.TestCase):
 
     def test_main(self):
 
-        log_analyzer.main()
+        log_analyzer.main(self.config)
         filecmp.clear_cache()
         self.assertTrue(filecmp.cmp(self.source_path, self.report_path), 'Report file is not equal to sample Report!')
 
