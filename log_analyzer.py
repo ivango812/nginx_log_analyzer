@@ -15,6 +15,7 @@ import shutil
 import logging
 import operator
 import argparse
+import tempfile
 import configparser
 from typing import Pattern
 from string import Template
@@ -22,7 +23,7 @@ from datetime import datetime
 from collections import namedtuple
 
 
-config = {
+config_default = {
     "REPORT_SIZE": 1000,
     "REPORT_DIR": "./reports",
     "REPORT_HTML_TEMPLATE": "./report.html",
@@ -32,18 +33,18 @@ config = {
 }
 
 LOG_LINE_REGEXP = (r"^(?P<remote_host>[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}) +" 
-                  """(?P<remote_user>[^ ]+) +"""
-                  """(?P<http_x_real_ip>[^ ]+) +"""
-                  """(?P<time_local>\[[^\]]+\]) +"""
-                  """"[a-z]+ (?P<request>[^"]+) HTTP[^"]+" +"""
-                  """(?P<status>[^ ]+) +"""
-                  """(?P<body_bytes_sent>[^ ]+) +"""
-                  """"(?P<http_referer>[^"]+)" +"""
-                  """"(?P<http_user_agent>[^"]+)" +"""
-                  """"(?P<http_x_forwarded_for>[^"]+)" +"""
-                  """"(?P<http_X_REQUEST_ID>[^"]+)" +"""
-                  """"(?P<http_X_RB_USER>[^"]+)" +"""
-                  """(?P<request_time>[0-9]+\.[0-9]+)$""")
+                   """(?P<remote_user>[^ ]+) +"""
+                   """(?P<http_x_real_ip>[^ ]+) +"""
+                   """(?P<time_local>\[[^\]]+\]) +"""
+                   """"[a-z]+ (?P<request>[^"]+) HTTP[^"]+" +"""
+                   """(?P<status>[^ ]+) +"""
+                   """(?P<body_bytes_sent>[^ ]+) +"""
+                   """"(?P<http_referer>[^"]+)" +"""
+                   """"(?P<http_user_agent>[^"]+)" +"""
+                   """"(?P<http_x_forwarded_for>[^"]+)" +"""
+                   """"(?P<http_X_REQUEST_ID>[^"]+)" +"""
+                   """"(?P<http_X_RB_USER>[^"]+)" +"""
+                   """(?P<request_time>[0-9]+\.[0-9]+)$""")
 log_line_pattern = re.compile(LOG_LINE_REGEXP, re.IGNORECASE)
 
 MAX_ERROR_COUNT = 100
@@ -70,6 +71,7 @@ def configure_logger(is_logging_to_file=None, level=logging.DEBUG):
 
 
 def handle_config_file(config, filename):
+    # TODO: Fix default config for Parser and change configfile._sections call
     configfile = configparser.ConfigParser(config)
     configfile.optionxform = str
     configfile.read(filename)
@@ -137,7 +139,7 @@ def get_latest_log_filename(log_dir):
             raise ValueError('Incorrect date in the log filename: %s' % dir_entry.name)
 
         if not latest_log_file or cur_file_date > latest_log_file.date:
-            latest_log_file = LogFile(filename=dir_entry.name, date=cur_file_date)
+            latest_log_file = LogFile(filename=dir_entry.path, date=cur_file_date)
 
     if not latest_log_file:
         raise FileNotFoundError('Nginx log files not found in %s' % log_dir)
@@ -175,9 +177,7 @@ def calculate_statistics(urls, total_request_count, total_request_time):
     statistic = []
     # noinspection PyDictCreation
     for url, url_time in urls.items():
-        url_stat = {'url': url,
-                    'count': len(url_time),
-                    'time_sum': round(sum(url_time), FLOAT_PRECISION)}
+        url_stat = dict({'url': url, 'count': len(url_time), 'time_sum': round(sum(url_time), FLOAT_PRECISION)})
 
         # count percent
         url_stat['count_perc'] = round(100 * url_stat['count'] / total_request_count, FLOAT_PRECISION)
@@ -204,8 +204,11 @@ def write_report(report_filename, statistic, report_html_template, report_size):
 
     s = Template(tpl_string)
     report_string = s.safe_substitute(table_json=json.dumps(statistic[:report_size], sort_keys=True))  # , indent=4
-    with open(report_filename, 'wt+', encoding='utf-8') as log:
+    temp_report = tempfile.mktemp()
+    with open(temp_report, 'wt+', encoding='utf-8') as log:
         log.write(report_string)
+    # to make report creation an atomic operation using coping of the ready report
+    shutil.move(temp_report, report_filename)
 
 
 def main(config):
@@ -244,11 +247,11 @@ if __name__ == "__main__":
 
     script_args = get_script_args()
     if script_args.config:
-        handle_config_file(config, script_args.config)
-    configure_logger(config["LOGGING_TO_FILE"], config['LOGGING_LEVEL'])
+        handle_config_file(config_default, script_args.config)
+    configure_logger(config_default["LOGGING_TO_FILE"], config_default['LOGGING_LEVEL'])
 
     try:
-        main(config)
+        main(config_default)
     except KeyboardInterrupt:  # catching Ctrl+C or other Exception
         logging.info("Interrapted by user!")
         sys.exit(2)
