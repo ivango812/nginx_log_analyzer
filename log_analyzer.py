@@ -55,7 +55,6 @@ ANALYZER_LOG_FILENAME = './logfile.log'
 
 
 def get_script_args():
-    logging.info('Parsing script args...')
     parser = argparse.ArgumentParser("log_analyzer.py")
     parser.add_argument('--config', help="config filename path")
     args = parser.parse_args()
@@ -134,7 +133,7 @@ def get_latest_log_filename(log_dir):
             try:
                 cur_file_date = datetime.strptime(matched.group('date'), "%Y%m%d")
             except ValueError:
-                raise RuntimeError('Incorrect date in the log filename: ' + dir_entry.name)
+                raise ValueError('Incorrect date in the log filename: %s' % dir_entry.name)
 
             if cur_file_date > max_log_date:
                 max_log_date = cur_file_date
@@ -219,17 +218,12 @@ def main():
     configure_logging(logging, config["LOGGING_TO_FILE"], config['LOGGING_LEVEL'])
 
     logging.info('Launch NGINX Log Analyzer ======================================================')
-    logging.debug('Using config: ', config)
-
+    logging.debug('Using config: %s' % json.dumps(config, indent=4))
     logging.info('Searching the latest log file...')
-    try:
-        logfile = get_latest_log_filename(config["LOG_DIR"])
-    except ValueError:
-        logging.error('Incorrect date in the log filename: ' + logfile.filename)
-        sys.exit(1)
+
+    logfile = get_latest_log_filename(config["LOG_DIR"])
 
     logging.info('Last log found: %s' % logfile.filename)
-
     logging.info('Parsing log filename and build report filename, creating report directory if not exists')
 
     prepare_report_dir(config['REPORT_DIR'])
@@ -258,7 +252,7 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:  # catching Ctrl+C or other Exception
-        logging.exception("Interrapted by user!")
+        logging.info("Interrapted by user!")
         sys.exit(2)
     except Exception as err:
         logging.exception(err)
