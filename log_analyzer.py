@@ -51,15 +51,8 @@ MAX_ERROR_PERCENT = 0.1
 FLOAT_PRECITION = 3
 LogFile = namedtuple('LogFile', ['filename', 'date'])
 StatCount = namedtuple('StatCount', ['lines', 'urls', 'time', 'errors'])
-SELF_LOG_FILENAME = './logfile.log'
+ANALYZER_LOG_FILENAME = './logfile.log'
 
-
-def configure_logging(is_logging_to_file=False, level=logging.DEBUG):
-    logging_filename = SELF_LOG_FILENAME if is_logging_to_file else None
-    logging.basicConfig(filename=logging_filename,
-                        format="[%(asctime)s] %(levelname).1s %(message)s",
-                        datefmt="%Y.%m.%d %H:%M:%S",
-                        level=level)
 
 def get_script_args():
     logging.info('Parsing script args...')
@@ -67,6 +60,14 @@ def get_script_args():
     parser.add_argument('--config', help="config filename path")
     args = parser.parse_args()
     return args
+
+
+def configure_logging(logging, is_logging_to_file=None, level=logging.DEBUG):
+    logging_filename = ANALYZER_LOG_FILENAME if is_logging_to_file else None
+    logging.basicConfig(filename=logging_filename,
+                        format="[%(asctime)s] %(levelname).1s %(message)s",
+                        datefmt="%Y.%m.%d %H:%M:%S",
+                        level=level)
 
 
 def handle_config_file(config, filename):
@@ -130,13 +131,17 @@ def get_latest_log_filename(log_dir):
             continue
         matched = log_file_regexp.match(dir_entry.name)
         if matched:
-            cur_file_date = datetime.strptime(matched.group('date'), "%Y%m%d")
+            try:
+                cur_file_date = datetime.strptime(matched.group('date'), "%Y%m%d")
+            except ValueError:
+                raise RuntimeError('Incorrect date in the log filename: ' + dir_entry.name)
+
             if cur_file_date > max_log_date:
                 max_log_date = cur_file_date
                 log_filename = dir_entry.path
 
     if not log_filename:
-        raise RuntimeError('Nginx log files not found in %s' % log_dir, logging.INFO)
+        raise FileNotFoundError('Nginx log files not found in %s' % log_dir)
     return LogFile(filename=log_filename, date=max_log_date)
 
 
@@ -160,8 +165,6 @@ def read_and_parse_log(logfile):
             else:
                 errors += 1
                 logging.debug('Error line: %s' % line)
-                if requests == 0 and errors > MAX_ERROR_COUNT:
-                    raise RuntimeError('Too many error lines in log file - $s' % errors, logging.ERROR)
             lines += 1
             # if lines >= 500: break # limit for test
     stat = StatCount(lines=lines, urls=requests, time=time, errors=errors)
@@ -197,11 +200,8 @@ def calculate_statistics(urls, total_request_count, total_request_time):
 
 
 def write_report(report_filename, statistic, report_html_template, report_size):
-    try:
-        with open(report_html_template, 'rt', encoding='utf-8') as log:
-            tpl_string = log.read()
-    except FileNotFoundError:
-        raise RuntimeError('File report.html not found', logging.ERROR)
+    with open(report_html_template, 'rt', encoding='utf-8') as log:
+        tpl_string = log.read()
 
     s = Template(tpl_string)
     report_string = s.safe_substitute(table_json=json.dumps(statistic[:report_size], sort_keys=True))  # , indent=4
@@ -211,62 +211,53 @@ def write_report(report_filename, statistic, report_html_template, report_size):
 
 def main():
 
-    try:  # catching Ctrl+C or other Exception
-        script_args = get_script_args()
+    script_args = get_script_args()
 
-        if script_args.config:
-            handle_config_file(config, script_args.config)
+    if script_args.config:
+        handle_config_file(config, script_args.config)
 
-        configure_logging(config["LOGGING_TO_FILE"], config['LOGGING_LEVEL'])
+    configure_logging(logging, config["LOGGING_TO_FILE"], config['LOGGING_LEVEL'])
 
-        logging.info('Launch NGINX Log Analyzer ======================================================')
-        logging.debug('Using config: ', config)
+    logging.info('Launch NGINX Log Analyzer ======================================================')
+    logging.debug('Using config: ', config)
 
-        logging.info('Searching the latest log file...')
-        try:
-            logfile = get_latest_log_filename(config["LOG_DIR"])
-        except ValueError:
-            logging.error('Incorrect date in the log filename: ' + logfile.filename)
-            sys.exit(1)
+    logging.info('Searching the latest log file...')
+    try:
+        logfile = get_latest_log_filename(config["LOG_DIR"])
+    except ValueError:
+        logging.error('Incorrect date in the log filename: ' + logfile.filename)
+        sys.exit(1)
 
-        logging.info('Last log found: %s' % logfile.filename)
+    logging.info('Last log found: %s' % logfile.filename)
 
-        logging.info('Parsing log filename and build report filename, creating report directory if not exists')
+    logging.info('Parsing log filename and build report filename, creating report directory if not exists')
 
-        prepare_report_dir(config['REPORT_DIR'])
-        report_filename = build_report_filepath(config['REPORT_DIR'], logfile.date)
-        if os.path.exists(report_filename):
-            logging.info('Report "%s" already exists!' % report_filename)
-            sys.exit(0)
+    prepare_report_dir(config['REPORT_DIR'])
+    report_filename = build_report_filepath(config['REPORT_DIR'], logfile.date)
+    if os.path.exists(report_filename):
+        logging.info('Report "%s" already exists!' % report_filename)
+        sys.exit(0)
 
-        logging.info('Reading and analyzing log file...')
-        urls, stat = read_and_parse_log(logfile)
+    logging.info('Reading and analyzing log file...')
+    urls, stat = read_and_parse_log(logfile)
 
-        logging.info('Total parsed lines: %d, error lines: %d' % (stat.lines, stat.errors))
-        if stat.lines and stat.errors/stat.lines > MAX_ERROR_PERCENT:
-            raise RuntimeError('Too many error lines (%.2f%%) in the log file' % (100*stat.errors/stat.lines), logging.ERROR)
+    logging.info('Total parsed lines: %d, error lines: %d' % (stat.lines, stat.errors))
+    if stat.lines and stat.errors/stat.lines > MAX_ERROR_PERCENT:
+        raise RuntimeError('Too many error lines (%.2f%%) in the log file' % (100*stat.errors/stat.lines))
 
-        logging.info('Calculating statistics...')
-        statistic = calculate_statistics(urls, stat.urls, stat.time)
+    logging.info('Calculating statistics...')
+    statistic = calculate_statistics(urls, stat.urls, stat.time)
 
-        logging.info('Writing report file: %s', report_filename)
-        write_report(report_filename, statistic, config['REPORT_HTML_TEMPLATE'], config['REPORT_SIZE'])
+    logging.info('Writing report file: %s', report_filename)
+    write_report(report_filename, statistic, config['REPORT_HTML_TEMPLATE'], config['REPORT_SIZE'])
 
-        logging.info('Done!')
-
-    except RuntimeError as err:  # err.args = [message, error_type]
-        if err.args[1] == logging.ERROR:
-            logging.error(err.args[0])
-            sys.exit(1)
-        if err.args[1] == logging.INFO:
-            logging.info(err.args[0])
-            sys.exit(0)
+    logging.info('Done!')
 
 
 if __name__ == "__main__":
     try:
         main()
-    except KeyboardInterrupt:
+    except KeyboardInterrupt:  # catching Ctrl+C or other Exception
         logging.exception("Interrapted by user!")
         sys.exit(2)
     except Exception as err:
