@@ -13,6 +13,7 @@ class TestLogAnalyzer(unittest.TestCase):
         config = {
             "REPORT_SIZE": 1000,
             "REPORT_DIR": "./reports_test",
+            "REPORT_HTML_TEMPLATE": "./report.html",
             "LOG_DIR": "./log_test",
             "LOGGING_TO_FILE": True,
             "LOGGING_LEVEL": log_analyzer.logging.DEBUG
