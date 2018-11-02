@@ -32,6 +32,8 @@ config_default = {
     "LOGGING_LEVEL": logging.DEBUG
 }
 
+_log_file_pattern = re.compile(r"""^nginx-access-ui.log-(?P<date>[0-9]{8})(.gz)?""")
+
 LOG_LINE_REGEXP = (r"^(?P<remote_host>[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}) +" 
                    """(?P<remote_user>[^ ]+) +"""
                    """(?P<http_x_real_ip>[^ ]+) +"""
@@ -45,7 +47,7 @@ LOG_LINE_REGEXP = (r"^(?P<remote_host>[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{
                    """"(?P<http_X_REQUEST_ID>[^"]+)" +"""
                    """"(?P<http_X_RB_USER>[^"]+)" +"""
                    """(?P<request_time>[0-9]+\.[0-9]+)$""")
-log_line_pattern = re.compile(LOG_LINE_REGEXP, re.IGNORECASE)
+_log_line_pattern = re.compile(LOG_LINE_REGEXP, re.IGNORECASE)
 
 MAX_ERROR_COUNT = 100
 MAX_ERROR_PERCENT = 0.1
@@ -123,14 +125,15 @@ def get_latest_log_filename(log_dir):
     """
 
     latest_log_file = None
-    log_file_regexp = re.compile(r"""^nginx-access-ui.log-(?P<date>[0-9]{8})(.gz)?""")  # type: Pattern[str]
     if not os.path.isdir(log_dir):
         raise FileNotFoundError('Directory "%s" is not found!' % log_dir)
 
     for dir_entry in os.scandir(log_dir):
+
         if not dir_entry.is_file():
             continue
-        matched = log_file_regexp.match(dir_entry.name)
+
+        matched = _log_file_pattern.match(dir_entry.name)
         if not matched:
             continue
         try:
@@ -154,7 +157,7 @@ def read_and_parse_log(filename):
     with opener(filename, 'rt', encoding='utf-8') as file:
 
         for line in file:
-            matches = log_line_pattern.match(line)
+            matches = _log_line_pattern.match(line)
             if matches:
                 request = matches.group("request")
                 request_time = float(matches.group("request_time"))
