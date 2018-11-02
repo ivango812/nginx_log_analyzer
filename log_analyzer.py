@@ -114,7 +114,7 @@ def build_report_filepath(report_dir, dt):
     """
     Build report file path
     """
-    return os.path.join(report_dir, "report-%s.html" % dt.strftime("%Y.%m.%d"))
+    return os.path.join(report_dir, "report-{}.html".format(dt.strftime("%Y.%m.%d")))
 
 
 def get_latest_log_filename(log_dir):
@@ -126,7 +126,7 @@ def get_latest_log_filename(log_dir):
 
     latest_log_file = None
     if not os.path.isdir(log_dir):
-        raise FileNotFoundError('Directory "%s" is not found!' % log_dir)
+        raise FileNotFoundError('Directory "{}" is not found!'.format(log_dir))
 
     for dir_entry in os.scandir(log_dir):
 
@@ -139,13 +139,13 @@ def get_latest_log_filename(log_dir):
         try:
             cur_file_date = datetime.strptime(matched.group('date'), "%Y%m%d")
         except ValueError:
-            raise ValueError('Incorrect date in the log filename: %s' % dir_entry.name)
+            raise ValueError('Incorrect date in the log filename: {}'.format(dir_entry.name))
 
         if not latest_log_file or cur_file_date > latest_log_file.date:
             latest_log_file = LogFile(filename=dir_entry.path, date=cur_file_date)
 
     if not latest_log_file:
-        raise FileNotFoundError('Nginx log files not found in %s' % log_dir)
+        raise FileNotFoundError('Nginx log files not found in {}'.format(log_dir))
 
     return latest_log_file
 
@@ -168,7 +168,7 @@ def read_and_parse_log(filename):
                 requests += 1
             else:
                 errors += 1
-                logging.debug('Error line: %s' % line)
+                logging.debug('Error line: {}'.format(line))
             lines += 1
             # if lines >= 500: break # limit for test
     stat = StatCount(lines=lines, urls=requests, time=time, errors=errors)
@@ -217,31 +217,31 @@ def write_report(report_filename, statistic, report_html_template, report_size):
 def main(config):
 
     logging.info('Launch NGINX Log Analyzer ======================================================')
-    logging.debug('Using config: %s' % json.dumps(config, indent=4))
+    logging.debug('Using config: {}'.format(json.dumps(config, indent=4)))
     logging.info('Searching the latest log file...')
 
     logfile = get_latest_log_filename(config["LOG_DIR"])
 
-    logging.info('Last log found: %s' % logfile.filename)
+    logging.info('Last log found: {}'.format(logfile.filename))
     logging.info('Parsing log filename and build report filename, creating report directory if not exists')
 
     prepare_report_dir(config['REPORT_DIR'])
     report_filename = build_report_filepath(config['REPORT_DIR'], logfile.date)
     if os.path.exists(report_filename):
-        logging.info('Report "%s" already exists!' % report_filename)
+        logging.info('Report "{}" already exists!'.format(report_filename))
         sys.exit(0)
 
     logging.info('Reading and analyzing log file...')
     urls, stat = read_and_parse_log(logfile.filename)
 
-    logging.info('Total parsed lines: %d, error lines: %d' % (stat.lines, stat.errors))
+    logging.info('Total parsed lines: {}, error lines: {}'.format(stat.lines, stat.errors))
     if stat.lines and stat.errors/stat.lines > MAX_ERROR_PERCENT:
-        raise RuntimeError('Too many error lines (%.2f%%) in the log file' % (100*stat.errors/stat.lines))
+        raise RuntimeError('Too many error lines ({}%) in the log file'.format(100*stat.errors/stat.lines))
 
     logging.info('Calculating statistics...')
     statistic = calculate_statistics(urls, stat.urls, stat.time)
 
-    logging.info('Writing report file: %s', report_filename)
+    logging.info('Writing report file: {}'.format(report_filename))
     write_report(report_filename, statistic, config['REPORT_HTML_TEMPLATE'], config['REPORT_SIZE'])
     logging.info('Done!')
 
