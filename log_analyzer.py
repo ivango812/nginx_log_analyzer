@@ -61,7 +61,7 @@ def get_script_args():
     return args
 
 
-def configure_logging(logging, is_logging_to_file=None, level=logging.DEBUG):
+def configure_logger(is_logging_to_file=None, level=logging.DEBUG):
     logging_filename = ANALYZER_LOG_FILENAME if is_logging_to_file else None
     logging.basicConfig(filename=logging_filename,
                         format="[%(asctime)s] %(levelname).1s %(message)s",
@@ -86,7 +86,7 @@ def median(lst):
     if n < 1:
             return None
     if n % 2 == 1:
-        return sorted(lst)[n//2]
+            return sorted(lst)[n//2]
     else:
         return sum(sorted(lst)[n//2-1:n//2+1])/2.0
 
@@ -119,8 +119,8 @@ def get_latest_log_filename(log_dir):
     :param log_dir:
     :return:
     """
-    log_filename = ''
-    max_log_date = datetime(1970, 1, 1)
+
+    latest_log_file = None
     log_file_regexp = re.compile(r"""^nginx-access-ui.log-(?P<date>[0-9]{8})(.gz)?""")  # type: Pattern[str]
     if not os.path.isdir(log_dir):
         raise FileNotFoundError('Directory "%s" is not found!' % log_dir)
@@ -129,27 +129,27 @@ def get_latest_log_filename(log_dir):
         if not dir_entry.is_file():
             continue
         matched = log_file_regexp.match(dir_entry.name)
-        if matched:
-            try:
-                cur_file_date = datetime.strptime(matched.group('date'), "%Y%m%d")
-            except ValueError:
-                raise ValueError('Incorrect date in the log filename: %s' % dir_entry.name)
+        if not matched:
+            continue
+        try:
+            cur_file_date = datetime.strptime(matched.group('date'), "%Y%m%d")
+        except ValueError:
+            raise ValueError('Incorrect date in the log filename: %s' % dir_entry.name)
 
-            if cur_file_date > max_log_date:
-                max_log_date = cur_file_date
-                log_filename = dir_entry.path
+        if not latest_log_file or cur_file_date > latest_log_file.date:
+            latest_log_file = LogFile(filename=dir_entry.name, date=cur_file_date)
 
-    if not log_filename:
+    if not latest_log_file:
         raise FileNotFoundError('Nginx log files not found in %s' % log_dir)
-    return LogFile(filename=log_filename, date=max_log_date)
+
+    return latest_log_file
 
 
-def read_and_parse_log(logfile):
+def read_and_parse_log(filename):
     urls = {}
     lines = errors = requests = time = 0
-    logname = logfile.filename
-    opener = (gzip.open if logname.endswith('.gz') else open)
-    with opener(logname, 'rt', encoding='utf-8') as file:
+    opener = (gzip.open if filename.endswith('.gz') else open)
+    with opener(filename, 'rt', encoding='utf-8') as file:
 
         for line in file:
             matches = log_line_pattern.match(line)
@@ -210,11 +210,6 @@ def write_report(report_filename, statistic, report_html_template, report_size):
 
 def main(config):
 
-    script_args = get_script_args()
-    if script_args.config:
-        handle_config_file(config, script_args.config)
-    configure_logging(logging, config["LOGGING_TO_FILE"], config['LOGGING_LEVEL'])
-
     logging.info('Launch NGINX Log Analyzer ======================================================')
     logging.debug('Using config: %s' % json.dumps(config, indent=4))
     logging.info('Searching the latest log file...')
@@ -231,7 +226,7 @@ def main(config):
         sys.exit(0)
 
     logging.info('Reading and analyzing log file...')
-    urls, stat = read_and_parse_log(logfile)
+    urls, stat = read_and_parse_log(logfile.filename)
 
     logging.info('Total parsed lines: %d, error lines: %d' % (stat.lines, stat.errors))
     if stat.lines and stat.errors/stat.lines > MAX_ERROR_PERCENT:
@@ -246,11 +241,17 @@ def main(config):
 
 
 if __name__ == "__main__":
+
+    script_args = get_script_args()
+    if script_args.config:
+        handle_config_file(config, script_args.config)
+    configure_logger(config["LOGGING_TO_FILE"], config['LOGGING_LEVEL'])
+
     try:
         main(config)
     except KeyboardInterrupt:  # catching Ctrl+C or other Exception
         logging.info("Interrapted by user!")
         sys.exit(2)
-    except Exception:
-        logging.exception()
+    except Exception as msg:
+        logging.exception(msg)
         sys.exit(1)
