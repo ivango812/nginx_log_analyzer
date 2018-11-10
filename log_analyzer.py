@@ -104,10 +104,10 @@ def prepare_report_dir(report_dir):
     if not os.path.isdir(report_dir):
         os.mkdir(report_dir)
 
-    jquery_file_src = 'jquery.tablesorter.min.js'
-    jquery_file_dest = os.path.join(report_dir, jquery_file_src)
-    if not os.path.isfile(jquery_file_dest):
-        shutil.copyfile(jquery_file_src, jquery_file_dest)
+    # jquery_file_src = 'jquery.tablesorter.min.js'
+    # jquery_file_dest = os.path.join(report_dir, jquery_file_src)
+    # if not os.path.isfile(jquery_file_dest):
+    #     shutil.copyfile(jquery_file_src, jquery_file_dest)
 
 
 def build_report_filepath(report_dir, dt):
@@ -256,8 +256,8 @@ if __name__ == "__main__":
     try:
         main(config_default)
     except KeyboardInterrupt:  # catching Ctrl+C or other Exception
-        logging.info("Interrapted by user!")
-        sys.exit(2)
+        logging.info("Interrupted by user!")
+        raise KeyboardInterrupt("Interrupted by user!")
     except Exception as msg:
         logging.exception(msg)
         sys.exit(1)
